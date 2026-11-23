@@ -1,0 +1,12 @@
+{
+  "name": "rooted-rising",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Rooted & Rising Car Companion (buildless static app served from dist/)",
+  "scripts": {
+    "dev": "wrangler pages dev dist"
+  },
+  "devDependencies": {
+    "wrangler": "^4.166.0"
+  }
+}
