@@ -12,6 +12,8 @@ const account = document.querySelector('#account');
 let page = 'Home';
 let editing;
 let noticeTimer;
+let bot = null; // Cloudflare Turnstile check on the login / sign-up form
+let saving = false;
 const sections = { Home:'⌂', Garage:'◇', Records:'▤', Reminders:'◷' };
 const fields = {
   car: [
@@ -46,21 +48,25 @@ async function api(path, method='GET', body) {
     body: body ? JSON.stringify(body) : undefined
   });
   const result = await response.json().catch(()=>({}));
-  if (response.status === 401 && me) { me = null; render(); say('Your session ended. Please log in again.'); }
-  if (!response.ok) throw new Error(result.error || 'Something went wrong. Please try again.');
+  if (response.status === 401 && me) { me = null; data = fresh(); if (dialog.open) dialog.close(); render(); say('Your session ended. Please log in again.'); }
+  if (!response.ok) throw Object.assign(new Error(result.error || 'Something went wrong. Please try again.'), {status:response.status});
   return result;
 }
 async function save(next, message) {
-  try { await api('/api/data','PUT',{data:next}); }
-  catch (error) { say('Couldn’t save: '+error.message); return false; }
-  data = next;
+  if (saving) return false;
+  saving = true;
+  try { data = (await api('/api/data','PUT',{data:next})).data; }
+  catch (error) { if (error.status !== 401) say('Couldn’t save: '+error.message); return false; }
+  finally { saving = false; }
   render();
   say(message);
   return true;
 }
-async function loadAccount() {
-  const result = await api('/api/data');
+async function loadAccount(result) {
+  result ??= await api('/api/data');
+  me = result.user;
   data = result.data ?? fresh();
+  if (!me) return;
   // Move anything saved in this browser before accounts existed into the account, once.
   let local = null;
   try { local = JSON.parse(localStorage.getItem(key)); } catch {}
@@ -69,20 +75,19 @@ async function loadAccount() {
   }
 }
 async function start() {
-  try { me = (await api('/api/me')).user; }
+  // One request both checks the login and loads the customer's data.
+  try { await loadAccount(); }
   catch { content.innerHTML = blank('Can’t reach Car Companion','Check your connection and reload the page.'); return; }
-  try {
-    if (me?.role === 'customer') await loadAccount();
-  } catch (error) { say(error.message); }
   render();
 }
 function renderAuth() {
   const signup = authMode === 'signup';
   content.innerHTML = '<section class="hero"><h1>'+(signup?'Create your account':'Welcome back')+'</h1><p>'+(signup?'Keep your car details, records and reminders safe in one place.':'Log in to see your car details, records and reminders.')+'</p></section>'+
     '<form id="auth" class="card auth" novalidate><div class="field"><label for="auth-email">Email</label><input id="auth-email" name="email" type="email" autocomplete="email" required maxlength="254"></div>'+
-    '<div class="field"><label for="auth-password">Password</label><input id="auth-password" name="password" type="password" autocomplete="'+(signup?'new-password':'current-password')+'" required minlength="8" maxlength="200">'+(signup?'<p class="hint">At least 8 characters.</p>':'')+'</div>'+
-    '<div class="actions"><button class="primary" type="submit">'+(signup?'Create account':'Log in')+'</button></div></form>'+
+    '<div class="field"><label for="auth-password">Password</label><input id="auth-password" name="password" type="password" autocomplete="'+(signup?'new-password':'current-password')+'" required maxlength="200">'+(signup?'<p class="hint">At least 10 characters. Avoid passwords you use on other sites.</p>':'')+'</div>'+
+    '<div class="bot-check" id="bot-check"></div><div class="actions"><button class="primary" type="submit">'+(signup?'Create account':'Log in')+'</button></div></form>'+
     '<div class="card auth switch"><p>'+(signup?'Already have an account?':'New to Car Companion?')+'</p>'+button(signup?'Log in instead':'Create an account','auth-mode','secondary')+'</div>';
+  bot = botCheck(document.querySelector('#bot-check'), signup?'signup':'login');
 }
 function day() {
   const now = new Date();
@@ -112,7 +117,7 @@ function reminderCard(item) {
     button(item.done?'Reopen':'Mark done','toggle','secondary',item.id)+button('Edit','edit-reminders','quiet',item.id)+'</div></article>';
 }
 function render() {
-  account.innerHTML = me ? '<span class="who">'+safe(me.email)+'</span>'+button('Log out','logout','quiet') : '';
+  account.innerHTML = me ? '<span class="who">'+safe(me.email)+'</span>'+button('Password','password','quiet')+button('Log out','logout','quiet') : '';
   tabs.hidden = me?.role !== 'customer';
   if (!me) { renderAuth(); return; }
   const due = data.reminders.filter(item=>!item.done).sort((a,b)=>a.date.localeCompare(b.date));
@@ -130,7 +135,7 @@ function render() {
     content.innerHTML = '<div class="page-head"><h1>Garage</h1><p>Keep the details you need at the fitment counter or on a call.</p></div>'+
       (car?'<article class="card"><h2>'+safe(car.name)+'</h2>'+listDetails([['Vehicle',car.model],['Registration',car.plate],['Tyre size',car.tyre],['Roadside assistance',car.roadside],['Emergency contact',car.contact]])+'</article>':blank('Add your car','Save your first car’s details and useful phone numbers.'))+
       '<div class="actions">'+button(car?'Edit car':'Add my car','edit-car','primary')+(car?button('Remove car','delete-car','quiet'):'')+'</div>'+
-      '<p class="hint" style="margin-top:18px">Saved to your account, so it’s there on any device you log in from.</p>';
+      '<p class="hint spaced">Saved to your account, so it’s there on any device you log in from.</p>';
   }
   if (page === 'Records') {
     content.innerHTML = '<div class="page-head"><div class="section-head"><h1>Records</h1>'+button('New record','edit-records','primary')+'</div><p>Log tyre purchases, services and repairs.</p></div><div class="grid">'+
@@ -167,12 +172,13 @@ content.addEventListener('submit',async event=>{
   if (!email.trim() || !password) { say('Enter your email and password.'); return; }
   submit.disabled = true;
   try {
-    me = (await api(authMode==='signup'?'/api/signup':'/api/login','POST',{email:email.trim(),password,portal:'customer'})).user;
+    const turnstile = await bot.token();
+    await api(authMode==='signup'?'/api/signup':'/api/login','POST',{email:email.trim(),password,portal:'customer',turnstile});
     await loadAccount();
     page = 'Home';
     render();
     say(authMode==='signup'?'Account created. Welcome!':'Logged in.');
-  } catch (error) { say(error.message); submit.disabled = false; }
+  } catch (error) { say(error.message); submit.disabled = false; bot?.reset(); }
 });
 form.addEventListener('submit',async event=>{
   event.preventDefault();
@@ -206,6 +212,7 @@ document.addEventListener('click',async event=>{
   if (!button) return;
   const {action,id}=button.dataset;
   if (action==='auth-mode') { authMode = authMode==='signup'?'login':'signup'; renderAuth(); document.querySelector('#auth-email').focus(); }
+  else if (action==='password') changePassword();
   else if (action==='logout') { try { await api('/api/logout','POST'); } catch {} me = null; data = fresh(); authMode = 'login'; render(); say('Logged out.'); }
   else if (action==='page') { page=id; render(); window.scrollTo(0,0); }
   else if (action.startsWith('edit-')) openEditor(action.slice(5),id);
@@ -217,4 +224,5 @@ document.addEventListener('click',async event=>{
     if(await save({...data,[group]:data[group].filter(item=>item.id!==id)},'Entry deleted.')) dialog.close();
   }
 });
+const changePassword = setupPasswordDialog('customer', say);
 start();

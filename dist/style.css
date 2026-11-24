@@ -59,3 +59,6 @@ nav[hidden]{display:none}
 .button-link{display:inline-flex;align-items:center;text-decoration:none;background:#fff8ef;color:var(--accent);position:relative;z-index:1}
 a{color:var(--accent)}
 .switch{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:14px}.switch p{margin:0;font-weight:650}
+.spaced{margin-top:18px}.loading{color:var(--muted);padding:48px 0;text-align:center}.bot-check:empty{display:none}.bot-check{margin-top:12px}.form-error{color:#9b1c31;font-weight:650;min-height:1.2em;margin:10px 0 0}.form-error:empty{display:none}
+.mast{flex-wrap:nowrap}.brand{white-space:nowrap}.account .quiet{white-space:nowrap;padding:6px 7px}
+@media (max-width:560px){.who{display:none}.brand{font-size:.72rem;letter-spacing:.1em}.bloom{font-size:1.4rem}}
