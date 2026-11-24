@@ -1,6 +1,10 @@
 // Shared helpers for email/password auth on Cloudflare Pages Functions + D1.
 
-const COOKIE = 'rr_session';
+// Customers and admins get separate session cookies, so both can be logged in
+// in the same browser without one replacing the other.
+const COOKIES = { customer: 'rr_session', admin: 'rr_admin' };
+const ROLES = { customer: 'customer', admin: 'superuser' };
+const cookieName = portal => COOKIES[portal] ?? COOKIES.customer;
 const SESSION_DAYS = 30;
 const PBKDF2_ITERATIONS = 100000; // Cloudflare Workers' maximum for PBKDF2
 const MAX_FAILURES = 10; // failed logins per email...
@@ -58,16 +62,16 @@ export async function verifyPassword(password, stored) {
 
 const sha256 = async text => toHex(await crypto.subtle.digest('SHA-256', enc.encode(text)));
 
-function readCookie(request) {
-  const match = (request.headers.get('cookie') || '').match(new RegExp('(?:^|;\\s*)' + COOKIE + '=([^;]+)'));
+function readCookie(request, portal) {
+  const match = (request.headers.get('cookie') || '').match(new RegExp('(?:^|;\\s*)' + cookieName(portal) + '=([^;]+)'));
   return match ? match[1] : null;
 }
 
-function cookie(value, maxAge) {
-  return `${COOKIE}=${value}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`;
+function cookie(portal, value, maxAge) {
+  return `${cookieName(portal)}=${value}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`;
 }
 
-export async function startSession(db, userId) {
+export async function startSession(db, userId, portal) {
   const token = toHex(crypto.getRandomValues(new Uint8Array(32)));
   const now = Date.now();
   await db.batch([
@@ -76,18 +80,18 @@ export async function startSession(db, userId) {
       .bind(await sha256(token), userId, now, now, now + SESSION_DAYS * 86400000),
     db.prepare('UPDATE users SET last_login_at = ? WHERE id = ?').bind(now, userId)
   ]);
-  return cookie(token, SESSION_DAYS * 86400);
+  return cookie(portal, token, SESSION_DAYS * 86400);
 }
 
-export async function endSession(db, request) {
-  const token = readCookie(request);
+export async function endSession(db, request, portal) {
+  const token = readCookie(request, portal);
   if (token) await db.prepare('DELETE FROM sessions WHERE token_hash = ?').bind(await sha256(token)).run();
-  return cookie('', 0);
+  return cookie(portal, '', 0);
 }
 
-// Returns { id, email, role } for the logged-in user, or null.
-export async function currentUser(db, request) {
-  const token = readCookie(request);
+// Returns { id, email, role } for the user logged in to this portal ('customer' or 'admin'), or null.
+export async function currentUser(db, request, portal) {
+  const token = readCookie(request, portal);
   if (!token || !/^[0-9a-f]{64}$/.test(token)) return null;
   const tokenHash = await sha256(token);
   const now = Date.now();
@@ -95,7 +99,7 @@ export async function currentUser(db, request) {
     `SELECT u.id, u.email, u.role, s.last_seen_at FROM sessions s JOIN users u ON u.id = s.user_id
      WHERE s.token_hash = ? AND s.expires_at > ?`
   ).bind(tokenHash, now).first();
-  if (!user) return null;
+  if (!user || user.role !== ROLES[portal]) return null;
   // Record activity at most once a minute, so the superuser can see who is online.
   if (now - user.last_seen_at > 60000) {
     await db.prepare('UPDATE sessions SET last_seen_at = ? WHERE token_hash = ?').bind(now, tokenHash).run();

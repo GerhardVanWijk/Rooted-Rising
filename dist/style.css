@@ -58,3 +58,4 @@ nav {
 nav[hidden]{display:none}
 .button-link{display:inline-flex;align-items:center;text-decoration:none;background:#fff8ef;color:var(--accent);position:relative;z-index:1}
 a{color:var(--accent)}
+.switch{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:14px}.switch p{margin:0;font-weight:650}

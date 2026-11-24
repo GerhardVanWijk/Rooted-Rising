@@ -6,7 +6,7 @@ const ONLINE_MS = 5 * 60 * 1000;
 // lets a superuser change, suspend, delete or log in as another account,
 // and customers' car data is not included.
 export async function onRequestGet({ request, env }) {
-  const user = await currentUser(env.DB, request);
+  const user = await currentUser(env.DB, request, 'admin');
   if (!user) return json({ error: 'Please log in.' }, 401);
   if (user.role !== 'superuser') return json({ error: 'Not allowed.' }, 403);
   const now = Date.now();

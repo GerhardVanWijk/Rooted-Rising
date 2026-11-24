@@ -76,27 +76,45 @@ async function start() {
   } catch (error) { say(error.message); }
   render();
 }
-function ago(time) {
-  if (!time) return 'Never';
-  const minutes = Math.round((Date.now()-time)/60000);
-  if (minutes < 1) return 'Just now';
-  if (minutes < 60) return minutes+' min ago';
-  if (minutes < 1440) return Math.round(minutes/60)+' h ago';
-  return new Intl.DateTimeFormat('en-ZA',{day:'numeric',month:'short',year:'numeric'}).format(new Date(time));
-}
 function renderAuth() {
   const signup = authMode === 'signup';
   content.innerHTML = '<section class="hero"><h1>'+(signup?'Create your account':'Welcome back')+'</h1><p>'+(signup?'Keep your car details, records and reminders safe in one place.':'Log in to see your car details, records and reminders.')+'</p></section>'+
     '<form id="auth" class="card auth" novalidate><div class="field"><label for="auth-email">Email</label><input id="auth-email" name="email" type="email" autocomplete="email" required maxlength="254"></div>'+
     '<div class="field"><label for="auth-password">Password</label><input id="auth-password" name="password" type="password" autocomplete="'+(signup?'new-password':'current-password')+'" required minlength="8" maxlength="200">'+(signup?'<p class="hint">At least 8 characters.</p>':'')+'</div>'+
-    '<div class="actions"><button class="primary" type="submit">'+(signup?'Create account':'Log in')+'</button>'+
-    button(signup?'I already have an account':'Create an account','auth-mode','quiet')+'</div></form>';
+    '<div class="actions"><button class="primary" type="submit">'+(signup?'Create account':'Log in')+'</button></div></form>'+
+    '<div class="card auth switch"><p>'+(signup?'Already have an account?':'New to Car Companion?')+'</p>'+button(signup?'Log in instead':'Create an account','auth-mode','secondary')+'</div>';
+}
+function day() {
+  const now = new Date();
+  return [now.getFullYear(), String(now.getMonth()+1).padStart(2,'0'), String(now.getDate()).padStart(2,'0')].join('-');
+}
+function formatDate(date) {
+  return new Intl.DateTimeFormat('en-ZA',{day:'numeric',month:'short',year:'numeric'}).format(new Date(date+'T12:00:00'));
+}
+function amount(value) {
+  return new Intl.NumberFormat('en-ZA',{style:'currency',currency:'ZAR'}).format(Number(value));
+}
+function button(label, action, kind='secondary', id='') {
+  return '<button type="button" class="'+kind+'" data-action="'+action+'" data-id="'+safe(id)+'">'+label+'</button>';
+}
+function listDetails(items) {
+  return '<dl class="details">'+items.filter(([,value])=>value).map(([label,value])=>'<div><dt>'+label+'</dt><dd>'+safe(value)+'</dd></div>').join('')+'</dl>';
+}
+function blank(title,body) {
+  return '<div class="card empty"><h3>'+title+'</h3><p class="hint">'+body+'</p></div>';
+}
+function reminderCard(item) {
+  const past = item.date < day();
+  const status = item.done ? 'Done' : past ? 'Overdue' : item.date === day() ? 'Due today' : 'Upcoming';
+  return '<article class="card"><div class="card-head"><h3>'+safe(item.title)+'</h3><span class="tag'+(item.done?' done':'')+'">'+status+'</span></div>'+
+    '<p class="label">'+safe(item.type)+' · '+formatDate(item.date)+'</p><div class="actions">'+
+    (item.done ? '' : button('Add to calendar','calendar','secondary',item.id))+
+    button(item.done?'Reopen':'Mark done','toggle','secondary',item.id)+button('Edit','edit-reminders','quiet',item.id)+'</div></article>';
 }
 function render() {
   account.innerHTML = me ? '<span class="who">'+safe(me.email)+'</span>'+button('Log out','logout','quiet') : '';
   tabs.hidden = me?.role !== 'customer';
   if (!me) { renderAuth(); return; }
-  if (me.role === 'superuser') { content.innerHTML = '<section class="hero"><h1>Admin account</h1><p>You’re logged in as an administrator. Customer tools aren’t available on this account.</p><a class="primary button-link" href="/admin">Go to the admin portal</a></section>'; return; }
   const due = data.reminders.filter(item=>!item.done).sort((a,b)=>a.date.localeCompare(b.date));
   tabs.innerHTML = Object.entries(sections).map(([name,icon])=>'<button type="button" data-action="page" data-id="'+name+'" '+(page===name?'aria-current="page"':'')+'><span aria-hidden="true">'+icon+'</span>'+name+'</button>').join('');
   if (page === 'Home') {

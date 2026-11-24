@@ -4,14 +4,14 @@ const MAX_BYTES = 500000;
 
 // Each customer can read and save only their own Car Companion data.
 export async function onRequestGet({ request, env }) {
-  const user = await currentUser(env.DB, request);
+  const user = await currentUser(env.DB, request, 'customer');
   if (!user) return json({ error: 'Please log in.' }, 401);
   const row = await env.DB.prepare('SELECT data FROM user_data WHERE user_id = ?').bind(user.id).first();
   return json({ data: row ? JSON.parse(row.data) : null });
 }
 
 export async function onRequestPut({ request, env }) {
-  const user = await currentUser(env.DB, request);
+  const user = await currentUser(env.DB, request, 'customer');
   if (!user) return json({ error: 'Please log in.' }, 401);
   if (user.role !== 'customer') return json({ error: 'Only customer accounts store car data.' }, 403);
   const body = await readJson(request);

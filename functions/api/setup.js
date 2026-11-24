@@ -43,6 +43,6 @@ export async function onRequestPost({ request, env }) {
   });
   if (result.conflict) return json({ error: 'That email already has a customer account. Use a different email for the admin.' }, 409);
   if (!result.meta.changes) return json({ error: 'The admin account has already been set up. Please log in.' }, 403);
-  const setCookie = await startSession(env.DB, id);
+  const setCookie = await startSession(env.DB, id, 'admin');
   return json({ user: { email, role: 'superuser' } }, 201, { 'set-cookie': setCookie });
 }

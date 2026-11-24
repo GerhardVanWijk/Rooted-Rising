@@ -26,9 +26,9 @@ export async function onRequestPost({ request, env }) {
   if (body.portal === 'admin' && user.role !== 'superuser') {
     return json({ error: 'This login is for administrators only. Customers log in on the main page.' }, 403);
   }
-  if (body.portal === 'customer' && user.role === 'superuser') {
+  if (body.portal !== 'admin' && user.role === 'superuser') {
     return json({ error: 'Administrators log in at /admin.' }, 403);
   }
-  const setCookie = await startSession(env.DB, user.id);
+  const setCookie = await startSession(env.DB, user.id, user.role === 'superuser' ? 'admin' : 'customer');
   return json({ user: { email: user.email, role: user.role } }, 200, { 'set-cookie': setCookie });
 }

@@ -66,8 +66,7 @@ function render() {
 async function loadPeople() { people = await api('/api/admin/users'); }
 async function start() {
   try {
-    me = (await api('/api/me')).user;
-    if (me && me.role !== 'superuser') { await api('/api/logout','POST'); me = null; }
+    me = (await api('/api/me?portal=admin')).user;
     if (me) await loadPeople(); else setupNeeded = (await api('/api/setup')).needed;
   } catch (error) { content.innerHTML = '<div class="card empty"><h3>Can’t load the admin portal</h3><p class="hint">'+safe(error.message)+'</p></div>'; return; }
   render();
@@ -92,7 +91,7 @@ content.addEventListener('submit', async event => {
 });
 document.addEventListener('click', async event => {
   const action = event.target.closest('[data-action]')?.dataset.action;
-  if (action === 'logout') { try { await api('/api/logout','POST'); } catch {} me = null; people = null; render(); say('Logged out.'); }
+  if (action === 'logout') { try { await api('/api/logout?portal=admin','POST'); } catch {} me = null; people = null; render(); say('Logged out.'); }
   if (action === 'refresh') { try { await loadPeople(); renderPeople(); say('Updated.'); } catch (error) { say(error.message); } }
 });
 start();

@@ -17,6 +17,6 @@ export async function onRequestPost({ request, env }) {
     if (String(err).includes('UNIQUE')) return json({ error: 'An account with that email already exists. Try logging in.' }, 409);
     throw err;
   }
-  const setCookie = await startSession(env.DB, id);
+  const setCookie = await startSession(env.DB, id, 'customer');
   return json({ user: { email, role: 'customer' } }, 201, { 'set-cookie': setCookie });
 }
