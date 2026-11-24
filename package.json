@@ -4,9 +4,12 @@
   "private": true,
   "description": "Rooted & Rising Car Companion (buildless static app served from dist/)",
   "scripts": {
-    "dev": "wrangler pages dev dist"
+    "dev": "wrangler pages dev dist",
+    "db:migrate": "wrangler d1 migrations apply rootedrising-db --remote",
+    "db:migrate:local": "wrangler d1 migrations apply rootedrising-db --local"
   },
   "devDependencies": {
     "wrangler": "^4.166.0"
-  }
+  },
+  "type": "module"
 }

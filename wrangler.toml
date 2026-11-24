@@ -1,0 +1,9 @@
+name = "rootedrising"
+pages_build_output_dir = "dist"
+compatibility_date = "2026-11-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "rootedrising-db"
+database_id = "65567e32-8910-40ea-b841-0059f8d558e4"
+migrations_dir = "migrations"
